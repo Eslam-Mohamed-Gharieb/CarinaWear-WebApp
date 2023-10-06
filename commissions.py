@@ -4,7 +4,6 @@ from io import BytesIO
 import base64
 import os
 import xlsxwriter
-from streamlit_gsheets import GSheetsConnection
 
 # Function to process the Excel file
 def process_excel_file(uploaded_file):
@@ -46,12 +45,9 @@ def process_excel_file(uploaded_file):
 # Function to fetch data from Google Sheets based on employee ID
 def fetch_data_from_google_sheets(employee_id):
     # Use the Google Sheets API to fetch data
+    sheet_id = "15tknLvLFrBn8Pa-d8qI-yc7msINjphT5mXa0XIGLJ7M"
     url = "https://docs.google.com/spreadsheets/d/15tknLvLFrBn8Pa-d8qI-yc7msINjphT5mXa0XIGLJ7M/edit?usp=sharing"
-    conn = st.experimental_connection("gsheets", type=GSheetsConnection)
-    data = conn.read(spreadsheet=url, worksheet="0")
-
-    # Convert the fetched data to a DataFrame
-    df = pd.DataFrame(data)
+    df = pd.read_excel(f"https://docs.google.com/spreadsheets/d/{sheet_id}/export?format=xlsx")
 
     # Filter the DataFrame to get data for the entered employee_id
     employee_data = df[df['Employee Code'] == int(employee_id)]
