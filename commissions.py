@@ -2,13 +2,11 @@ import streamlit as st
 import pandas as pd
 from io import BytesIO
 import base64
-import tkinter as tk
-from tkinter import filedialog
 import os
-from tempfile import NamedTemporaryFile
+import xlsxwriter
 
 # Function to process the Excel file
-def process_excel_file(uploaded_file, output_file_name):
+def process_excel_file(uploaded_file):
     try:
         # Load the Excel workbook
         df = pd.read_excel(uploaded_file)
@@ -37,19 +35,11 @@ def process_excel_file(uploaded_file, output_file_name):
         # Concatenate DataFrames
         df2 = pd.concat(dfs_to_concat, ignore_index=True)
 
-        # Get the user's home directory
-        user_home = os.path.expanduser("~")
-
-        # Construct the full output path (e.g., Desktop or Documents folder)
-        output_folder = os.path.join(user_home, "Desktop")  # Change "Desktop" to "Documents" if needed
-        output_file_path = os.path.join(output_folder, output_file_name + ".xlsx")
-
-        # Save the DataFrame to the specified folder
-        df2.to_excel(output_file_path, index=False)
-        return output_file_path
+        # Return the processed DataFrame
+        return df, None  # Return the DataFrame and no error message
 
     except Exception as e:
-        return str(e)
+        return None, str(e)  # Return no DataFrame and the error message
 
 # Create the Streamlit app
 def main():
@@ -109,14 +99,28 @@ def main():
         if uploaded_file:
             st.success("File uploaded successfully!")
 
-            output_file_name = st.text_input("Choose the name of your file")
+            if st.button("Calculate Commissions"):
+                processed_df, error_message = process_excel_file(uploaded_file)
+                if processed_df is not None:
+                    st.success("Commissions calculated successfully!")
 
-            if st.button("Calculate Commissions") and output_file_name:
-                output_file_path = process_excel_file(uploaded_file, output_file_name)
-                if not isinstance(output_file_path, str):
-                    st.error(f"Error processing Excel file: {output_file_path}")
+                    # Create an Excel workbook
+                    output = BytesIO()
+                    workbook = xlsxwriter.Workbook(output, {'in_memory': True})
+                    worksheet = workbook.add_worksheet()
+
+                    # Write the processed DataFrame to the Excel workbook
+                    processed_df.to_excel(output, index=False, sheet_name="Commission_Report")
+
+                    # Close the workbook
+                    workbook.close()
+
+                    # Create a download link for the Excel workbook
+                    b64 = base64.b64encode(output.getvalue()).decode()
+                    href = f'<a href="data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64,{b64}" download="Carina_Commission_Done.xlsx">Download Carina Commission Done</a>'
+                    st.markdown(href, unsafe_allow_html=True)
                 else:
-                    st.success(f"Commissions calculated and saved to: {output_file_path}")
+                    st.error(f"Error processing Excel file: {error_message}")
 
     elif selected_option == "Other Functionality":
         st.title("Other Functionality")
