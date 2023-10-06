@@ -1,5 +1,5 @@
-st-gsheets-connection
 pandas==1.3.3
 streamlit>=1.22.0
 openpyxl
 xlsxwriter
+git+https://github.com/streamlit/gsheets-connection
