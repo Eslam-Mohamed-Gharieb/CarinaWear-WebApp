@@ -4,6 +4,7 @@ from io import BytesIO
 import base64
 import os
 import xlsxwriter
+from streamlit_gsheets import GSheetsConnection
 
 # Function to process the Excel file
 def process_excel_file(uploaded_file):
@@ -41,6 +42,71 @@ def process_excel_file(uploaded_file):
     except Exception as e:
         return None, str(e)  # Return no DataFrame and the error message
 
+
+# Function to fetch data from Google Sheets based on employee ID
+def fetch_data_from_google_sheets(employee_id):
+    # Use the Google Sheets API to fetch data
+    url = "https://docs.google.com/spreadsheets/d/15tknLvLFrBn8Pa-d8qI-yc7msINjphT5mXa0XIGLJ7M/edit?usp=sharing"
+    conn = st.experimental_connection("gsheets", type=GSheetsConnection)
+    data = conn.read(spreadsheet=url, worksheet="0")
+
+    # Convert the fetched data to a DataFrame
+    df = pd.DataFrame(data)
+
+    # Filter the DataFrame to get data for the entered employee_id
+    employee_data = df[df['Employee Code'] == int(employee_id)]
+
+    if employee_data.empty:
+        st.warning("No data found for the given Employee ID.")
+    else:
+        # Create the output DataFrame
+        output_df = pd.DataFrame(columns=['Employee code', 'Job title', 'Employee Name', 'Relationship'])
+
+        # Extract employee details
+        employee_code = employee_data['Employee Code'].iloc[0]
+        job_title = employee_data['Job Title'].iloc[0]
+        employee_name = employee_data['Employee Name'].iloc[0]
+
+        # Add the employee as "Self" to the output DataFrame
+        output_df.loc[0] = [employee_code, job_title, employee_name, 'Self']
+
+        # Add subordinates and their subordinates recursively
+        subordinates = df[(df['Direct Report Code'] == employee_code) | (df['Line Manager Code'] == employee_code)]
+        for _, subordinate in subordinates.iterrows():
+            subordinate_name = subordinate['Employee Name']
+            output_df.loc[len(output_df)] = [subordinate['Employee Code'], subordinate['Job Title'], subordinate_name, 'Subordinate']
+
+            # Find subordinates of the current subordinate
+            sub_subordinates = df[(df['Direct Report Code'] == subordinate['Employee Code']) | (df['Line Manager Code'] == subordinate['Employee Code'])]
+            for _, sub_subordinate in sub_subordinates.iterrows():
+                sub_subordinate_name = sub_subordinate['Employee Name']
+                output_df.loc[len(output_df)] = [sub_subordinate['Employee Code'], sub_subordinate['Job Title'], sub_subordinate_name, 'Subordinate']
+
+        # Add direct managers
+        direct_manager_codes = [employee_data['Direct Report Code'].iloc[0]]
+        while direct_manager_codes[-1] != employee_data['Line Manager Code'].iloc[0]:
+            direct_manager = df[df['Employee Code'].isin(direct_manager_codes[-1:])]
+            direct_manager_name = direct_manager['Employee Name'].iloc[0]
+            output_df.loc[len(output_df)] = [direct_manager['Employee Code'].iloc[0], direct_manager['Job Title'].iloc[0], direct_manager_name, 'Direct Manager']
+            direct_manager_codes.append(direct_manager['Direct Report Code'].iloc[0])
+
+        # Add line manager
+        line_manager = df[df['Employee Code'] == employee_data['Line Manager Code'].iloc[0]]
+        line_manager_name = line_manager['Employee Name'].iloc[0]
+        output_df.loc[len(output_df)] = [line_manager['Employee Code'].iloc[0], line_manager['Job Title'].iloc[0], line_manager_name, 'Line Manager']
+
+        # Add peers
+        peers = df[(df['Department'] == employee_data['Department'].iloc[0]) & (df['Employee Code'] != employee_code)]
+        for _, peer in peers.iterrows():
+            peer_name = peer['Employee Name']
+            if peer_name not in output_df['Employee Name'].values:
+                output_df.loc[len(output_df)] = [peer['Employee Code'], peer['Job Title'], peer_name, 'Peer']
+
+        # Display the output DataFrame
+        return output_df
+
+
+    
 # Create the Streamlit app
 def main():
     # Enable wide layout for the sidebar
@@ -50,7 +116,7 @@ def main():
     st.sidebar.title("Menu")
 
     # Add buttons or radio buttons to choose functionalities
-    selected_option = st.sidebar.radio("Select an Option", ["Home", "Commission Calculator", "Other Functionality"])
+    selected_option = st.sidebar.radio("Select an Option", ["Home", "Commission Calculator","Empower360", "Other Functionality"])
 
     if selected_option == "Home":
         # Add a title with custom font and color using HTML and CSS
@@ -122,9 +188,22 @@ def main():
                 else:
                     st.error(f"Error processing Excel file: {error_message}")
 
-    elif selected_option == "Other Functionality":
-        st.title("Other Functionality")
-        # Add code for other functionality here...
+    elif selected_option == "Empower360":
+        st.title("Empower360")
+        employee_id = st.text_input("Enter your employee ID")
+
+        if st.button("Fetch Data"):
+            if not employee_id:
+                st.warning("Please enter your employee ID.")
+            else:
+                st.success("Fetched data...")
+
+                # Fetch data from Google Sheets based on employee ID
+                data = fetch_data_from_google_sheets(employee_id)
+
+                # Display the resulting DataFrame
+                st.write("Your Empower360 Required Input Data:")
+                st.write(data)
 
 if __name__ == "__main__":
     main()
