@@ -6,6 +6,8 @@ import os
 import xlsxwriter
 import pyodbc
 import datetime
+import matplotlib.pyplot as plt
+import seaborn as sns
 
 
 def upload_data_to_sql_server(df_uploaded):
@@ -321,6 +323,20 @@ def process_excel_file(uploaded_file):
     except Exception as e:
         return None, str(e)  # Return no DataFrame and the error message
 
+def fetch_data_from_wellness_data(employee_id):
+    wellness_all_df = pd.read_excel("https://docs.google.com/spreadsheets/d/1MydjNCc6GY2pFwLVvvp6vhERBh-FBU5oCOZ5t5kFa7M/export?format=xlsx&gid=783663279")
+
+    # Filter the DataFrame to get data for the entered employee_id
+    employee_filtered_wellness_df = wellness_all_df[wellness_all_df['Please Enter your Code — برجاء إدخال كودك'] == int(employee_id)]
+    # Extract the desired columns and rename them
+    employee_filtered_wellness_df = employee_filtered_wellness_df.iloc[:, 2:6]  # Extract columns 3 to 6
+    wellness_all_df = wellness_all_df.iloc[:, 2:6] 
+    employee_filtered_wellness_df.columns = ["Date", "Sleep Quality %", "Steps Count", "# of Burned Calories"]
+    wellness_all_df.columns = ["Date", "Sleep Quality %", "Steps Count", "# of Burned Calories"]
+    #employee_filtered_wellness_df["Date"] = pd.to_datetime(employee_filtered_wellness_df["Date"]).dt.date
+    #wellness_all_df["Date"]= pd.to_datetime(wellness_all_df["Date"]).dt.date
+
+    return employee_filtered_wellness_df, wellness_all_df
 
 # Function to fetch data from Google Sheets based on employee ID
 def fetch_data_from_google_sheets(employee_id):
@@ -381,8 +397,67 @@ def fetch_data_from_google_sheets(employee_id):
         # Display the output DataFrame
         return output_df
 
+# Function to plot wellness data with smoothed curves for an employee and all employees
+def plot_smoothed_wellness_data(employee_filtered_wellness_df, wellness_all_df):
+    # Convert the 'Date' column to datetime
+    wellness_all_df['Date'] = pd.to_datetime(wellness_all_df['Date'])
+    employee_filtered_wellness_df['Date'] = pd.to_datetime(employee_filtered_wellness_df['Date'])
 
-    
+    # Group by 'Date' and calculate the mean Steps Count and Sleep Quality % for both DataFrames
+    wellness_all_steps_mean = wellness_all_df.groupby('Date')['Steps Count'].mean().reset_index()
+    employee_filtered_steps_mean = employee_filtered_wellness_df.groupby('Date')['Steps Count'].mean().reset_index()
+    wellness_all_sleep_mean = wellness_all_df.groupby('Date')['Sleep Quality %'].mean().reset_index()
+    employee_filtered_sleep_mean = employee_filtered_wellness_df.groupby('Date')['Sleep Quality %'].mean().reset_index()
+
+    # Apply rolling mean to smoothen the lines
+    window_size = 7  # Adjust the window size as needed
+    wellness_all_steps_mean['Steps Count'] = wellness_all_steps_mean['Steps Count'].rolling(window=window_size).mean()
+    employee_filtered_steps_mean['Steps Count'] = employee_filtered_steps_mean['Steps Count'].rolling(window=window_size).mean()
+    wellness_all_sleep_mean['Sleep Quality %'] = wellness_all_sleep_mean['Sleep Quality %'].rolling(window=window_size).mean()
+    employee_filtered_sleep_mean['Sleep Quality %'] = employee_filtered_sleep_mean['Sleep Quality %'].rolling(window=window_size).mean()
+
+    # Create a Streamlit web app
+    st.title('Your Customized Wellness Data Plot')
+
+    # Create a modern theme using seaborn
+    sns.set_style("whitegrid")
+    sns.set_palette("colorblind")
+
+    # Create subplots for "Steps Count" and "Sleep Quality %"
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(15, 6))
+
+    # Plot "Steps Count" on the first subplot
+    sns.lineplot(data=wellness_all_steps_mean, x='Date', y='Steps Count', label='All Employees Data', marker='o', ax=ax1)
+    sns.lineplot(data=employee_filtered_steps_mean, x='Date', y='Steps Count', label='Your Data', marker='o', ax=ax1)
+    ax1.set_xlabel('Date')
+    ax1.set_ylabel('Steps Count')
+    ax1.set_title('Steps Count Over Time')
+    ax1.legend()
+    ax1.grid(True)
+
+    # Plot "Sleep Quality %" on the second subplot
+    sns.lineplot(data=wellness_all_sleep_mean, x='Date', y='Sleep Quality %', label='All Employees Data', marker='o', ax=ax2)
+    sns.lineplot(data=employee_filtered_sleep_mean, x='Date', y='Sleep Quality %', label='Your Data', marker='o', ax=ax2)
+    ax2.set_xlabel('Date')
+    ax2.set_ylabel('Sleep Quality %')
+    ax2.set_title('Sleep Quality % Over Time')
+    ax2.legend()
+    ax2.grid(True)
+
+    # Adjust layout
+    plt.tight_layout()
+
+    # Display the Streamlit app
+    st.pyplot(fig)
+
+
+
+
+
+
+
+
+
 # Create the Streamlit app
 def main():
     # Enable wide layout for the sidebar
@@ -397,7 +472,8 @@ def main():
         "Home": "🏠",
         "Carina Commission": "💰",
         "Empower360": "🚀",
-        "Merchandising": "🛍️",  # Add an icon for the "Merchandising" menu
+        "Merchandising": "🛍️",
+        "Wellness Program": "🏃‍",
     }
 
     # Add buttons or radio buttons to choose functionalities
@@ -422,10 +498,10 @@ def main():
             """,
             unsafe_allow_html=True,
         )
-        st.markdown('<h1 class="pink-title">Harnessing Technology: Escaping the Limits of Manual Work</h1>', unsafe_allow_html=True)
+        st.markdown('<h1 class="pink-title">Carina Automation Hub</h1>', unsafe_allow_html=True)
         st.markdown(
             """
-            <p class="description">I'm a Senior Data Analyst at Carina Wear, and I've worn so many hats that I'm starting to lose track!
+            <p class="description">I'm a Data Analyst at Carina Wear, and I've worn so many hats that I'm starting to lose track!
 
             Not content with just crunching numbers, I've taken on roles as an automation engineer, and now, I've even dabbled in front end and back end development.
             Who knew data analysis could lead to such a wild career evolution? I'm like a one-person tech circus – juggling data, automation, and coding with a healthy dose of humor!
@@ -507,5 +583,31 @@ def main():
                 st.write(df_uploaded)
                 upload_data_to_sql_server(df_uploaded)
                 st.success("Congrats! Item & ItemClass Tables have been Updated")
+
+    elif selected_option == "Wellness Program":
+        st.title("Wellness Program")
+        employee_id = st.text_input("Enter your employee ID")
+
+        if st.button("Fetch Data"):
+            if not employee_id:
+                st.warning("Please enter your employee ID.")
+            else:
+                st.success("Fetching Data...")
+
+                # Fetch data from Google Sheets based on employee ID
+                employee_filtered_wellness_df, wellness_all_df = fetch_data_from_wellness_data(employee_id)
+
+                # Check if data is found for the entered Employee ID
+                if employee_filtered_wellness_df.empty:
+                    st.warning('No data found for the entered Employee ID.')
+                else:
+                    st.write('Progress Data for Employee ID:', employee_id)
+                    st.write(employee_filtered_wellness_df)
+                    # Visualize progress data
+                    st.subheader('Visualize Your Progress')
+
+                    plot_smoothed_wellness_data(employee_filtered_wellness_df, wellness_all_df)
+
+
 if __name__ == "__main__":
     main()
