@@ -56,7 +56,7 @@ def upload_data_to_sql_server(df_uploaded):
             # Determine the next available ID
             next_id = df_ItemClass['ID'].max() + 1
         else:
-            next_id = 0
+            next_id = 1
 
         # Create a list of DataFrames to concatenate
         dfs_to_concat = []
@@ -78,7 +78,7 @@ def upload_data_to_sql_server(df_uploaded):
                 'DepartmentID': int(row['DepartmentID']),  # Replace with actual values
                 'CategoryID': int(row['CategoryID']),  # Replace with actual values
                 'Price': float(row['Price']),  # Replace with actual values
-                'Cost': float(row['Cost']),  # Replace with actual values
+                'Cost': 0,  # Replace with actual values
                 'SupplierID': int(row['SupplierID']),  # Replace with actual values
                 'BarcodeFormat': int(row['BarcodeFormat']),  # Replace with actual values
                 'SubDescription1': row['Family'],  # Replace with actual values
@@ -141,12 +141,12 @@ def upload_data_to_sql_server(df_uploaded):
         # Use Pandas to read the data into a DataFrame
         df_Item = pd.read_sql(Item_sql_query, conn)
 
-        # Check if df_ItemClass is not NaN
-        if not df_ItemClass.empty:
+        # Check if df_Item is not NaN
+        if not df_Item.empty:
             # Determine the next available ID
-            next_id = df_ItemClass['ID'].max() + 1
+            next_id = df_Item['ID'].max() + 1
         else:
-            next_id = 0
+            next_id = 1
 
         # Create a list of DataFrames to concatenate
         Item_dfs_to_concat = []
@@ -154,6 +154,7 @@ def upload_data_to_sql_server(df_uploaded):
         # Append rows from df_uploaded to df_ItemClass
         for index, row in df_uploaded.iterrows():
             new_row = {
+                'ID': next_id,
                 "BinLocation": "",
                 "BuydownPrice": 0,
                 "BuydownQuantity": 0,
@@ -223,14 +224,13 @@ def upload_data_to_sql_server(df_uploaded):
                 "IsGlobalvoucher": 0,
                 "DeleteZeroBalanceEntry": None,
                 "TenderID": 0,
-                'ID': next_id,
                 'Description': row['Description'],
                 'DBTimeStamp': None,  # Replace with actual values
                 'ItemLookupCode': row['Item Lookup Code'],  # Replace with actual values
                 'DepartmentID': int(row['DepartmentID']),  # Replace with actual values
                 'CategoryID': int(row['CategoryID']),  # Replace with actual values
                 'Price': float(row['Price']),  # Replace with actual values
-                'Cost': float(row['Cost']),  # Replace with actual values
+                'Cost': 0,  # Replace with actual values
                 'SupplierID': int(row['SupplierID']),  # Replace with actual values
                 'BarcodeFormat': int(row['BarcodeFormat']),  # Replace with actual values
                 'SubDescription1': row['Family'],  # Replace with actual values
@@ -279,12 +279,233 @@ def upload_data_to_sql_server(df_uploaded):
         disable_identity_query = "SET IDENTITY_INSERT Item OFF"
         cursor.execute(disable_identity_query)
 
+        # SQL query to select all data from the table
+        ItemClassComponent = f"SELECT * FROM ItemClassComponent"
+
+        # Use Pandas to read the data into a DataFrame
+        df_ItemClassComponent = pd.read_sql(ItemClassComponent, conn)
+
+        # Check if df_ItemClass is not NaN
+        if not df_ItemClassComponent.empty:
+            # Determine the next available ID
+            next_id = df_ItemClassComponent['ID'].max() + 1
+        else:
+            next_id = 1
+
+        # Create a list of DataFrames to concatenate
+        ItemClassComponent_dfs_to_concat = []
+
+        for index, row in df_uploaded.iterrows():
+            ItemClassID_row = df_ItemClass[df_ItemClass['ItemLookupCode'] == row['Item Lookup Code'].split("-")[0]]
+            ItemClassID =  ItemClassID_row.iloc[0]['ID']
+            new_row = {
+                "ID":next_id,
+                "ItemClassID":ItemClassID,
+                "ItemID":next_id,
+                "Quantity":1,
+                "Detail1":row['Color'],
+                "Detail2":row['Size'],
+                "Detail3":"",
+                "LastUpdated":datetime.datetime.now(),
+                "Price": 0,
+            }
+
+            # Append the new row as a DataFrame to the list
+            new_df = pd.DataFrame([new_row])
+            ItemClassComponent_dfs_to_concat.append(new_df)
+
+            next_id += 1
+
+
+        # Concatenate all DataFrames in the list
+        df_ItemClassComponent = pd.concat([df_ItemClassComponent] + ItemClassComponent_dfs_to_concat, ignore_index=True)
+
+        df_ItemClassComponent.dropna(subset=['ID'], inplace=True)
+
+        truncate_query_ItemClassComponent = "TRUNCATE TABLE ItemClassComponent"
+        cursor.execute(truncate_query_ItemClassComponent)
+
+        # Enable IDENTITY_INSERT for the Item table
+        enable_identity_query = "SET IDENTITY_INSERT ItemClassComponent ON"
+        cursor.execute(enable_identity_query)
+
+        # Loop through each row in the DataFrame and insert it into the SQL Server table
+        for index, row in df_ItemClassComponent.iterrows():
+            # Construct the SQL INSERT query dynamically based on the column names
+            columns = ', '.join(row.index)
+            values = ', '.join(['DEFAULT' if col == 'DBTimeStamp' else '?' for col in row.index])
+
+            # Filter out the row values, excluding 'DBTimeStamp'
+            row_values = [val for val, col in zip(row, row.index) if col != 'DBTimeStamp']
+
+            insert_query = f"INSERT INTO ItemClassComponent ({columns}) VALUES ({values})"
+            cursor.execute(insert_query, *row_values)
+
+        # Commit the changes
+        conn.commit()
+
+        # Disable IDENTITY_INSERT for the Item table
+        disable_identity_query = "SET IDENTITY_INSERT ItemClassComponent OFF"
+        cursor.execute(disable_identity_query)
+
+        # Create a list to store the grouped data
+        grouped_data = []
+
+        for _, row in df_uploaded.iterrows():
+            code_prefix = row['Item Lookup Code'].split('-')[0]  # Get the prefix of the Item Lookup Code
+            item_code = code_prefix
+
+            # Add rows for sizes
+            grouped_data.append({
+                'ItemLookupCode': item_code,
+                'Attribute': row['Size'],
+                'Type': 2,  # Indicate that it's a size
+            })
+
+            # Add rows for colors
+            grouped_data.append({
+                'ItemLookupCode': item_code,
+                'Attribute': row['Color'],
+                'Type': 1,  # Indicate that it's a color
+            })
+
+        # Create a DataFrame from the list of dictionaries
+        grouped_df = pd.DataFrame(grouped_data)
+
+        # Remove duplicated rows
+        grouped_df = grouped_df.drop_duplicates()
+
+        # Add a "display_order" column
+        grouped_df['display_order'] = grouped_df.groupby(['ItemLookupCode', 'Type']).cumcount() + 1
+
+
+        # Sample data for dim_df
+        dim_data = {
+            "dim_name": [
+                "Black", "White", "Off White", "Ivory", "Med.Grey Chine",
+                "D.Grey", "Med.Grey", "Silver", "Navy", "Tobaco", "Nude",
+                "Light Beige", "Med.Beige", "Dark Beige", "Blue", "Dark Brown",
+                "Coffee", "Havan", "Taupe", "Camel", "Greish", "Cigar", "kaki",
+                "Light Yellow", "Bright Yellow", "Canaria Yellow", "Dark Yellow",
+                "Mustard", "GoldenYellow", "Lime", "Pistache", "Light Mint",
+                "Classic Green", "Dark Teal", "green grey", "Olive", "Emerald Green",
+                "Deep Green", "Dark Aqua", "Aqua", "Turquoise", "Olive Green",
+                "Teal Green", "Blue Petroleum", "Light Blue", "True Blue", "Royal Blue",
+                "Blue Marine", "Pastel Light Blue", "Light Indigo", "Dark Indigo",
+                "Purple", "Deep Purple", "Light Orchide", "Bois De Rose", "Lavender",
+                "Light Lilac", "Deep Lilac", "Violet", "Rose", "Hot Pink", "Peach Blossom",
+                "Fucshia", "Magenta", "Wine", "Peach Skin", "Pink Violet", "Watermelon",
+                "Blush", "Coral", "Coral Pink", "peach", "Pale Peach", "Pink", "Red",
+                "Chile Peper", "Red Orange", "Red Brique", "Orange", "Neon Orange",
+                "Orange Simon", "Light Orange", "Marigold", "Light Simon", "Shrimp Orange",
+                "Light Burgundy", "Interacid", "Colored", "S", "M", "L", "XL", "2XL",
+                "3XL", "4XL", "SM", "LXL", "23X", "OS", "ML", "X2X", "1-2", "2-4",
+                "4-6", "6-8", "8-10", "10-12", "12-14", "14-16"
+            ],
+            "dim_id": [
+                "01", "02", "03", "04", "05", "06", "07", "08", "09", "10",
+                "11", "12", "13", "14", "15", "16", "17", "18", "19", "20",
+                "21", "22", "23", "24", "25", "27", "28", "29", "30", "31",
+                "32", "33", "34", "35", "36", "37", "38", "39", "40", "41",
+                "42", "43", "44", "45", "46", "47", "48", "49", "50", "51",
+                "52", "53", "54", "55", "56", "57", "58", "59", "60", "61",
+                "62", "63", "64", "65", "66", "67", "68", "70", "71", "72",
+                "73", "74", "75", "76", "77", "78", "80", "81", "83", "84",
+                "85", "86", "87", "88", "89", "90", "91", "99", "S", "M", "L",
+                "XL", "2XL", "3XL", "4XL", "SM", "LXL", "23X", "OS", "ML", "X2X",
+                "1-2", "2-4", "4-6", "6-8", "8-10", "10-12", "12-14", "14-16"
+            ]
+        }
+
+        dim_df = pd.DataFrame(dim_data)
+
+        # Merge the dim_df and grouped_df to add the "attribute_id" column
+        result_df = grouped_df.merge(dim_df, left_on="Attribute", right_on="dim_name", how="left")
+
+        # Rename the "dim_id" column to "attribute_id" and drop the "dim_name" column
+        result_df = result_df.rename(columns={"dim_id": "attribute_id"}).drop(columns=["dim_name"])
+
+
+        # SQL query to select all data from the table
+        MatrixAttributeDisplayOrder = f"SELECT * FROM MatrixAttributeDisplayOrder"
+
+        # Use Pandas to read the data into a DataFrame
+        df_MatrixAttributeDisplayOrder = pd.read_sql(MatrixAttributeDisplayOrder, conn)
+
+        # Check if df_ItemClass is not NaN
+        if not df_MatrixAttributeDisplayOrder.empty:
+            # Determine the next available ID
+            next_id = df_MatrixAttributeDisplayOrder['ID'].max() + 1
+        else:
+            next_id = 1
+
+        # Create a list of DataFrames to concatenate
+        MatrixAttributeDisplayOrder_dfs_to_concat = []
+
+        for index, row in result_df.iterrows():
+            ItemClassID_row = df_ItemClass[df_ItemClass['ItemLookupCode'] == row['ItemLookupCode']]
+            ItemClassID =  ItemClassID_row.iloc[0]['ID']
+
+            new_row = {
+                "ID":next_id,
+                "ItemClassID":ItemClassID,
+                "Dimension":row['Type'],
+                "Attribute":row['Attribute'],
+                "Code":row['attribute_id'],
+                "DisplayOrder":row["display_order"],
+                "Inactive":0,
+                "HQID":0,
+            }
+
+            # Append the new row as a DataFrame to the list
+            new_df = pd.DataFrame([new_row])
+            MatrixAttributeDisplayOrder_dfs_to_concat.append(new_df)
+
+            next_id += 1
+
+
+        # Concatenate all DataFrames in the list
+        df_MatrixAttributeDisplayOrder = pd.concat([df_MatrixAttributeDisplayOrder] + MatrixAttributeDisplayOrder_dfs_to_concat, ignore_index=True)
+
+        df_MatrixAttributeDisplayOrder.dropna(subset=['ID'], inplace=True)
+
+        truncate_query_MatrixAttributeDisplayOrder = "TRUNCATE TABLE MatrixAttributeDisplayOrder"
+        cursor.execute(truncate_query_MatrixAttributeDisplayOrder)
+
+        # Enable IDENTITY_INSERT for the Item table
+        enable_identity_query = "SET IDENTITY_INSERT MatrixAttributeDisplayOrder ON"
+        cursor.execute(enable_identity_query)
+
+        # Loop through each row in the DataFrame and insert it into the SQL Server table
+        for index, row in df_MatrixAttributeDisplayOrder.iterrows():
+            # Construct the SQL INSERT query dynamically based on the column names
+            columns = ', '.join(row.index)
+            values = ', '.join(['DEFAULT' if col == 'DBTimeStamp' else '?' for col in row.index])
+
+            # Filter out the row values, excluding 'DBTimeStamp'
+            row_values = [val for val, col in zip(row, row.index) if col != 'DBTimeStamp']
+
+            insert_query = f"INSERT INTO MatrixAttributeDisplayOrder ({columns}) VALUES ({values})"
+            cursor.execute(insert_query, *row_values)
+
+        # Commit the changes
+        conn.commit()
+
+        # Disable IDENTITY_INSERT for the Item table
+        disable_identity_query = "SET IDENTITY_INSERT MatrixAttributeDisplayOrder OFF"
+        cursor.execute(disable_identity_query)
+
         # Close the database connection
         conn.close()
-
         print(f'Data appended to table Item successfully.')
     except Exception as e:
         print(f'Error uploading data to SQL Server: {str(e)}')
+
+
+
+
+
+
 
 
 # Function to process the Excel file
