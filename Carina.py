@@ -13,7 +13,8 @@ import bcrypt
 
 def upload_data_to_sql_server(df_uploaded):
     # Define your SQL Server connection parameters
-    server_name = '41.33.164.221,1433'
+    server_name = '41.33.164.221'
+    port = 1433  # The port your SQL Server is listening on
     database_name = 'carina'
     username = 'sa'
     password = 'P@$$w0rd'
@@ -21,7 +22,7 @@ def upload_data_to_sql_server(df_uploaded):
     try:
         # Establish a connection to the SQL Server database
         conn = pyodbc.connect(
-            f'DRIVER={{SQL Server}};SERVER={server_name};DATABASE={database_name};UID={username};PWD={password}'
+            f'DRIVER={{SQL Server}};SERVER={server_name},{port};DATABASE={database_name};UID={username};PWD={password}'
         )
 
         # Create a cursor object to execute SQL commands
