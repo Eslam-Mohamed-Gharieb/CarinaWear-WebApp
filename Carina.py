@@ -13,7 +13,7 @@ import bcrypt
 
 def upload_data_to_sql_server(df_uploaded):
     # Define your SQL Server connection parameters
-    server_name = '41.33.164.221'
+    server_name = '41.33.164.221,1433'
     database_name = 'carina'
     username = 'sa'
     password = 'P@$$w0rd'
