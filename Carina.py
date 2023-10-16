@@ -498,7 +498,7 @@ def upload_data_to_sql_server(df_uploaded):
 
         # Close the database connection
         conn.close()
-        print(f'Data appended to table Item successfully.')
+        print(f'Data appended to tables successfully.')
     except Exception as e:
         print(f'Error uploading data to SQL Server: {str(e)}')
 
