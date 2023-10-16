@@ -1507,10 +1507,10 @@ def main():
                     df_uploaded = pd.read_excel(uploaded_item_file)
 
                     # Display the processed items (replace with appropriate display)
-                    st.write("Uploading these Items....")
+                    st.write("Uploading the Items....")
                     st.write(df_uploaded)
                     upload_data_to_sql_server(df_uploaded)
-                    st.success("Congrats! Item & ItemClass Tables have been Updated")
+                    st.success("Congrats! Checkout the RMS, everything should be up to date!")
 
         elif selected_option == "Wellness Program":
             st.title("Wellness Program")
@@ -1532,8 +1532,7 @@ def main():
                         st.write('Progress Data for Employee ID:', employee_id)
                         st.write(employee_filtered_wellness_df)
                         # Visualize progress data
-                        st.subheader('Visualize Your Progress')
-
+                        st.subheader('Wanna Catch Up With Your Progress!')
                         plot_smoothed_wellness_data(employee_filtered_wellness_df, wellness_all_df)
 
 
