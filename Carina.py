@@ -1292,7 +1292,17 @@ def fetch_data_from_google_sheets(employee_id):
         output_df.loc[len(output_df)] = [line_manager['Employee Code'].iloc[0], line_manager['Job Title'].iloc[0], line_manager_name, 'Line Manager']
 
         # Add peers
-        peers = df[(df['Department'] == employee_data['Department'].iloc[0]) & (df['Employee Code'] != employee_code)]
+        target_departments = ["Top Management", "Human Resources", "Retail Services", "Analytics", "Audit", "Customer Service", "Retail"]
+        target_sections = ["Export","Retail Business Development","Governmental Affairs","BD Merchandising","Accounting","Stock Control","Maintenance","Treasury","Information Technology",
+        "Carina Marketing","Tax","Clue Marketing","E-Commerce","Carina Cookies","Digital Transformation"]
+        target_subsections = ["Merchandising","Retail Merchandising","Costing","Pre-Production follow up","Fulfillment","Merchandising Planning","Product","Visual Merchandising (Carina)","Quality",
+        "Visual Merchandising (FlagShip)","Visual Merchandising (Clue)","Logistics","Purchasing","Brand Management","Production Coordination","Visual Merchandising (Outlet)","Sourcing","Fashion Design",
+        "Technical Design","Visual Merchandising","Barcode","Visual Merchandising (Franchise)","Show Room","Product Launch","Production Follow Up","E-Commerce"]
+
+        peers_departments = df[(df['Department'] == employee_data['Department'].iloc[0]) & (df['Employee Code'] != employee_code) & (df['Department'].isin(target_departments))]
+        peers_sections = df[(df['Section'] == employee_data['Section'].iloc[0]) & (df['Employee Code'] != employee_code) & (df['Section'].isin(target_sections))]
+        peers_subsections = df[(df['Sub Section'] == employee_data['Sub Section'].iloc[0]) & (df['Employee Code'] != employee_code) & (df['Sub Section'].isin(target_subsections))]
+        peers = pd.concat([peers_departments, peers_sections, peers_subsections], ignore_index=True)
         for _, peer in peers.iterrows():
             peer_name = peer['Employee Name']
             if peer_name not in output_df['Employee Name'].values:
